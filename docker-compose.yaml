@@ -1,0 +1,21 @@
+---
+version: "3.8"
+volumes:
+  postgis_db:
+services:
+  db:
+    image: postgis/postgis:14-3.1
+    environment:
+      POSTGRES_DB: will_be_restored
+      POSTGRES_USER: will_be_replaced
+      POSTGRES_PASSWORD: will_be_replaced
+    volumes:
+      - postgis_db:/var/lib/postgresql/data
+      - ./data/fixtures/:/docker-entrypoint-initdb.d/
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "transit", "-d", "gtfsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
