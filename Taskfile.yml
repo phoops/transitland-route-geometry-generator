@@ -1,0 +1,105 @@
+version: "3"
+
+tasks:
+  build-transitland-route-geometry-generator-dev:
+    desc: Build transitland-route-geometry-generator executable with support for debugging
+    deps:
+      - task: template/go-build-dev
+        vars:
+          CMD_NAME: transitland-route-geometry-generator
+
+  run-transitland-route-geometry-generator-debug:
+    desc: "Run transitland-route-geometry-generator binary with delve"
+    deps:
+      - task: template/go-run-debug
+        vars:
+          CMD_NAME: transitland-route-geometry-generator
+
+  build-transitland-route-geometry-generator-prod:
+    desc: "Build transitland-route-geometry-generator binary for production release"
+    deps:
+      - task: template/go-build-binary
+        vars:
+          CMD_NAME: "transitland-route-geometry-generator"
+
+  build-docker-transitland-route-geometry-generator:
+    desc: "Build transitland-route-geometry-generator prod container"
+    deps:
+      - task: template/docker-build
+        vars:
+          IMAGE_NAME: transitland-route-geometry-generator
+          DOCKER_FILE_PATH: ./docker/transitland-route-geometry-generator.dockerfile
+
+  push-docker-transitland-route-geometry-generator:
+    desc: "Push transitland-route-geometry-generator prod container to nexus"
+    deps:
+      - task: template/docker-push
+        vars:
+          IMAGE_NAME: transitland-route-geometry-generator
+
+  # Group commands
+  build-and-push-docker-images:
+    desc: "Build all images, then push to nexus"
+    # first run build, and only after push
+    cmds:
+      - task: build-docker-images
+      - task: push-docker-images
+
+  build-docker-images:
+    desc: "Build all images"
+    # do all the builds in parallel
+    deps:
+      - task: build-docker-transitland-route-geometry-generator
+
+  push-docker-images:
+    desc: "Push all images to nexus"
+    # do all the pushes in parallel
+    deps:
+      - task: push-docker-transitland-route-geometry-generator
+
+  lint:
+    desc: "lint the project"
+    cmds:
+      - golangci-lint -v run
+
+  # templates
+  template/go-build-binary:
+    env:
+      CGO_ENABLED: 0
+    vars:
+      GO_VERSION:
+        sh: go version | { read _ _ v _; echo ${v#go}; } 
+      VERSION:
+        sh: git describe --tags --always --dirty --match=v* 2> /dev/null || cat $(CURDIR)/.version 2> /dev/null || echo v0
+      BUILD_DATE:
+        sh: date +%Y%m%d%H%M%S
+    cmds:
+      - go build -ldflags '-X "github.com/phoops/transitland-route-geometry-generator/internal/commands.CliVersion={{.VERSION}}" -X "github.com/phoops/transitland-route-geometry-generator/internal/commands.GoVersion={{.GO_VERSION}}" -X "github.com/phoops/transitland-route-geometry-generator/internal/commands.BuildDate={{ .BUILD_DATE }}"' -o ./build/{{.CMD_NAME}} ./cmd/{{.CMD_NAME}}
+
+  template/go-build-dev:
+    cmds:
+      - go build -gcflags="all=-N -l" -o ./build/{{.CMD_NAME}} ./cmd/{{.CMD_NAME}}
+
+  template/go-run-debug:
+    cmds:
+      - dlv --continue --listen=:40001 --headless=true --api-version=2 --accept-multiclient exec ./build/{{.CMD_NAME}}
+
+  template/docker-build:
+    vars:
+      IMAGE_REPO_BASE: "phoops"
+      TAG:
+        sh: echo "$RELEASE_TAG"
+      LOCAL_IMAGE: "{{.IMAGE_NAME}}:{{.TAG}}"
+      REMOTE_IMAGE: "{{.IMAGE_REPO_BASE}}/{{.LOCAL_IMAGE}}"
+    cmds:
+      - docker build -f '{{.DOCKER_FILE_PATH}}' -t '{{.LOCAL_IMAGE}}' -t '{{.REMOTE_IMAGE}}' .
+
+  template/docker-push:
+    vars:
+      IMAGE_REPO_BASE: "phoops"
+      TAG:
+        sh: echo $RELEASE_TAG
+      LOCAL_IMAGE: "{{.IMAGE_NAME}}:{{.TAG}}"
+      REMOTE_IMAGE: "{{.IMAGE_REPO_BASE}}/{{.LOCAL_IMAGE}}"
+    cmds:
+      - docker push '{{.REMOTE_IMAGE}}'
