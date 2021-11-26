@@ -36,6 +36,7 @@ func NewClient(
 
 func (c *Client) CalculateRouteShapesFromTrips(
 	ctx context.Context,
+	gtfsFeedID int,
 	routeIDs []int,
 ) ([]RouteShapeRow, error) {
 	c.logger.Debugw("starting calculating shapes from trips", "route_ids", routeIDs)
@@ -62,6 +63,7 @@ func (c *Client) CalculateRouteShapesFromTrips(
 	).
 		Join("gtfs_shapes shapes on trips_shapes.shape_id = shapes.id").
 		GroupBy("route_id", "direction_id").
+		Where(squirrel.Eq{"shapes.feed_version_id": gtfsFeedID}).
 		OrderBy("route_id")
 
 	if routeIDs != nil {
