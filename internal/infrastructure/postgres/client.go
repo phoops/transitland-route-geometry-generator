@@ -59,7 +59,15 @@ func (c *Client) SetRouteShapes(
 			"generated",
 			"geometry",
 			"centroid",
-		)
+		).
+		Suffix(`
+			on conflict (route_id, direction_id) do update set
+			feed_version_id = excluded.feed_version_id,
+			shape_id = excluded.shape_id,
+			"generated" = excluded.generated,
+			geometry = excluded.geometry,
+			centroid = excluded.centroid
+		`)
 
 	rs := chunkRouteShapes(routeShapes, routeShapesInsertChunkSize)
 
