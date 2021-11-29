@@ -88,6 +88,15 @@ var generateCmd = &cobra.Command{
 			cmdLogger.Info("dry run completed, run again without the n flag")
 			return nil
 		}
+
+		cmdLogger.Info("starting insert of routes")
+
+		err = client.SetRouteShapes(cmd.Context(), result, feedVersionID)
+		if err != nil {
+			return err
+		}
+
+		cmdLogger.Info("route shapes inserted!")
 		return nil
 	},
 }

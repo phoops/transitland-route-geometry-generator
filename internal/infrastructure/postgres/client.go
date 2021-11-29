@@ -10,6 +10,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	routeShapesInsertChunkSize = 100
+)
+
 type RouteShapeRow struct {
 	RouteID              int    `db:"route_id"`
 	DirectionID          int    `db:"direction_id"`
@@ -35,18 +39,91 @@ func NewClient(
 	}
 }
 
-// func (c *Client) SetRouteShapes(
-// 	ctx context.Context,
-// 	routeShapes []RouteShapeRow,
-// 	gtfsFeedID int,
-// ) error {
-// 	// we set the shapes in chunk, in a transaction
-// 	tx, err := c.db.BeginTxx(ctx, nil)
-// 	if err != nil {
-// 		return errors.Wrap(err, "could not initiate route shapes set transaction")
-// 	}
-// 	return nil
-// }
+func (c *Client) SetRouteShapes(
+	ctx context.Context,
+	routeShapes []RouteShapeRow,
+	gtfsFeedID int,
+) error {
+	var insertedRoutes int
+	// we set the shapes in chunk, in a transaction
+	c.logger.Debugw("starting set route shapes", "gtfs_feed_id", gtfsFeedID)
+	stmbt := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+
+	q := stmbt.
+		Insert("tl_route_geometries").
+		Columns(
+			"route_id",
+			"direction_id",
+			"feed_version_id",
+			"shape_id",
+			"generated",
+			"geometry",
+			"centroid",
+		)
+
+	rs := chunkRouteShapes(routeShapes, routeShapesInsertChunkSize)
+
+	err := WithTransaction(c.logger, c.db, ctx, func(ctx context.Context, tx *sqlx.Tx) *TransactionError {
+
+		for nchunk, chunk := range rs {
+			queryChunk := q
+			for _, shape := range chunk {
+				queryChunk = queryChunk.Values(
+					shape.RouteID,
+					shape.DirectionID,
+					gtfsFeedID,
+					shape.LongestShapeID,
+					true, // this route geometry is always generated
+					shape.LongestShapeGeometry,
+					shape.LongestShapeCentroid,
+				)
+			}
+
+			query, args, err := queryChunk.ToSql()
+			if err != nil {
+				return &TransactionError{
+					RollbackNeeded: true,
+					Error:          errors.Wrap(err, "could not build query for bulk insert of route shapes"),
+				}
+			}
+
+			c.logger.Debugw(
+				"insert query",
+				"query",
+				query,
+				"args",
+				args,
+			)
+			res, err := tx.ExecContext(ctx, query, args...)
+			if err != nil {
+				return &TransactionError{
+					RollbackNeeded: true,
+					Error:          errors.Wrap(err, "error during insert query execution"),
+				}
+			}
+			ra, err := res.RowsAffected()
+			if err != nil {
+				return &TransactionError{
+					RollbackNeeded: true,
+					Error:          errors.Wrap(err, "could not get row affected by insert query"),
+				}
+			}
+
+			insertedRoutes = insertedRoutes + int(ra)
+
+			c.logger.Debugw("inserted shapes", "nchunk", nchunk, "chunk_dimension", routeShapesInsertChunkSize, "inserted_rows", ra)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		c.logger.Errorw("error during route shape insert", "gtfs_id", gtfsFeedID, zap.Error(err))
+		return err
+	}
+
+	return nil
+}
 
 func (c *Client) CalculateRouteShapesFromTrips(
 	ctx context.Context,
@@ -125,4 +202,16 @@ func (c *Client) CalculateRouteShapesFromTrips(
 	)
 
 	return result, nil
+}
+
+func chunkRouteShapes(slice []RouteShapeRow, chunkSize int) [][]RouteShapeRow {
+	var chunks [][]RouteShapeRow
+	for i := 0; i < len(slice); i += chunkSize {
+		end := i + chunkSize
+		if end > len(slice) {
+			end = len(slice)
+		}
+		chunks = append(chunks, slice[i:end])
+	}
+	return chunks
 }
