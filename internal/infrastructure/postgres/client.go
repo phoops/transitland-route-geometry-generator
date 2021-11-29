@@ -11,10 +11,11 @@ import (
 )
 
 type RouteShapeRow struct {
-	RouteID     string `db:"route_id"`
-	DirectionID string `db:"direction_id"`
-	Geometry    string `db:"geometry"`
-	Centroid    string `db:"centroid"`
+	RouteID              int    `db:"route_id"`
+	DirectionID          int    `db:"direction_id"`
+	LongestShapeID       int    `db:"longest_shape_id"`
+	LongestShapeGeometry string `db:"longest_shape_geometry"`
+	LongestShapeCentroid string `db:"longest_shape_centroid"`
 }
 
 type Client struct {
@@ -34,6 +35,19 @@ func NewClient(
 	}
 }
 
+// func (c *Client) SetRouteShapes(
+// 	ctx context.Context,
+// 	routeShapes []RouteShapeRow,
+// 	gtfsFeedID int,
+// ) error {
+// 	// we set the shapes in chunk, in a transaction
+// 	tx, err := c.db.BeginTxx(ctx, nil)
+// 	if err != nil {
+// 		return errors.Wrap(err, "could not initiate route shapes set transaction")
+// 	}
+// 	return nil
+// }
+
 func (c *Client) CalculateRouteShapesFromTrips(
 	ctx context.Context,
 	gtfsFeedID int,
@@ -46,23 +60,25 @@ func (c *Client) CalculateRouteShapesFromTrips(
 	q := stmbt.Select(
 		"trips_shapes.route_id",
 		"trips_shapes.direction_id",
-		"ST_ASTEXT(ST_UNION(ST_FORCE2D(shapes.geometry::geometry))::geography) as geometry",
-		"ST_ASTEXT(ST_CENTROID(ST_UNION(ST_FORCE2D(shapes.geometry::geometry)))::geography) as centroid",
-	).FromSelect(
-		stmbt.Select(
-			"route_id",
-			"direction_id",
-			"gt.shape_id",
-		).
-			LeftJoin(
-				"gtfs_shapes gs on gs.id = gt.shape_id",
-			).
-			From("gtfs_trips gt").
-			GroupBy("route_id", "direction_id", "gt.shape_id"),
-		"trips_shapes",
+		"first_value(shapes.id) over ( partition by (route_id, direction_id ) order by ST_LENGTH(shapes.geometry) desc) as longest_shape_id",
+		"first_value(st_force2d(shapes.geometry::geometry)::geography) over ( partition by (route_id, direction_id ) order by ST_LENGTH(shapes.geometry) desc) as longest_shape_geometry",
+		"first_value(St_centroid(st_force2d(shapes.geometry::geometry))::geography) over ( partition by (route_id, direction_id ) order by ST_LENGTH(shapes.geometry) desc) as longest_shape_centroid",
 	).
+		Distinct().
+		FromSelect(
+			stmbt.Select(
+				"route_id",
+				"direction_id",
+				"gt.shape_id",
+			).
+				LeftJoin(
+					"gtfs_shapes gs on gs.id = gt.shape_id",
+				).
+				From("gtfs_trips gt").
+				GroupBy("route_id", "direction_id", "gt.shape_id"),
+			"trips_shapes",
+		).
 		Join("gtfs_shapes shapes on trips_shapes.shape_id = shapes.id").
-		GroupBy("route_id", "direction_id").
 		Where(squirrel.Eq{"shapes.feed_version_id": gtfsFeedID}).
 		OrderBy("route_id")
 
