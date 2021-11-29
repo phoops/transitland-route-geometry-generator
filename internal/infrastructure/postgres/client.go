@@ -82,7 +82,7 @@ func (c *Client) CalculateRouteShapesFromTrips(
 		Where(squirrel.Eq{"shapes.feed_version_id": gtfsFeedID}).
 		OrderBy("route_id")
 
-	if routeIDs != nil {
+	if len(routeIDs) != 0 {
 		q = q.Where(squirrel.Eq{"route_id": routeIDs})
 	}
 
