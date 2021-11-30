@@ -1,0 +1,46 @@
+---
+name: Docker release flow
+on:
+  push:
+    tags:
+      - v*
+jobs:
+  transitland-route-geometry-generator-test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+      - name: Docker Compose Test Environment
+        uses: isbang/compose-action@v1.0.0
+        with:
+          down-flags: '--volumes'
+          compose-file: './docker-compose.yaml'
+      - name: Golang setup
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.16.4'
+      - name: Go test
+        run: go test -v ./...
+  transitland-route-geometry-generator-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install Task
+        uses: arduino/setup-task@v1
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build docker image
+        run: task build-and-push-docker-images
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}

@@ -1,0 +1,53 @@
+---
+name: Github release flow
+on:
+  release:
+    types:
+      - created
+jobs:
+  release-build-attach:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install Task
+        uses: arduino/setup-task@v1
+      - name: Build linux binary
+        run: task build-transitland-route-geometry-generator-prod
+      - name: Store Linux binary
+        uses: actions/upload-artifact@v1
+        with:
+          name: transitland-route-geometry-generator-linux
+          path: ${{ github.workspace }}/build/transitland-route-geometry-generator
+      - name: Download Linux binary
+        uses: actions/download-artifact@v1
+        with:
+          name: transitland-route-geometry-generator-linux
+      - name: Attach Linux binary to GitHub release
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ github.workspace }}/transitland-route-geometry-generator-linux/transitland-route-geometry-generator
+          asset_name: transitland-route-geometry-generator-linux
+          asset_label: Linux binary
+          asset_content_type: application/binary
+
+     
+     
+  release-notes:
+    needs: release-build-attach
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '12.x'
+      - run: npm install github-release-notes -g
+      - run: gren release --override
+        env:
+          GREN_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

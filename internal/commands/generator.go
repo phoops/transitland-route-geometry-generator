@@ -22,7 +22,7 @@ var RouteIDs []int
 func init() {
 	rootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().BoolVarP(&DryRun, "dry-run", "n", false, "dry run generation, without inserts")
-	generateCmd.Flags().StringVarP(&DbConnectionString, "database", "d", "", "dry run generation, without inserts")
+	generateCmd.Flags().StringVarP(&DbConnectionString, "database", "d", "", "postgres database connection string")
 	generateCmd.Flags().IntSliceVarP(&RouteIDs, "routes", "r", []int{}, "route ids to include in generation, all by default")
 
 	err := generateCmd.MarkFlagRequired("database")
