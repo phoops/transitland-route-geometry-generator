@@ -1,5 +1,9 @@
-name: Golang test flow
-on: [push]
+---
+name: Docker release flow
+on:
+  push:
+    tags:
+      - v*
 jobs:
   transitland-route-geometry-generator-test:
     runs-on: ubuntu-latest
@@ -24,3 +28,19 @@ jobs:
           go-version: '^1.16.4'
       - name: Go test
         run: go test -v ./...
+  transitland-route-geometry-generator-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install Task
+        uses: arduino/setup-task@v1
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build docker image
+        run: task build-and-push-docker-images
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
