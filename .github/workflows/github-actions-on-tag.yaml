@@ -30,6 +30,7 @@ jobs:
         run: go test -v ./...
   transitland-route-geometry-generator-release:
     runs-on: ubuntu-latest
+    needs: transitland-route-geometry-generator-test
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
