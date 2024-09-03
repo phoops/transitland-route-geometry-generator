@@ -27,7 +27,7 @@ jobs:
           name: transitland-route-geometry-generator-linux
           path: ${{ github.workspace }}/build/transitland-route-geometry-generator
       - name: Download Linux binary
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4.1.7
         with:
           name: transitland-route-geometry-generator-linux
       - name: Attach Linux binary to GitHub release
